@@ -1,111 +1,90 @@
-import numpy as np
-import pandas as pd
-import os
-import cv2
 import sys
+import cv2
 import mediapipe as mp
-from keras.models import load_model
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QVBoxLayout
-from PyQt5.QtGui import QImage, QPixmap
+import numpy as np
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage, QPixmap, QFont
 from PyQt5.QtCore import QTimer
+from keras.models import load_model
 
-# Load trained model
-model = load_model("./model/model.h5")
 
-# Mediapipe Pose Setup
-mp_pose = mp.solutions.pose
-pose = mp_pose.Pose()
-mp_drawing = mp.solutions.drawing_utils
-
-class PoseDetectorApp(QWidget):
+class PoseCaptureApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.initUI()
-        self.cap = None
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.detect_pose)
-        self.sequence = []
-        self.no_of_timesteps = 10
-        self.num_features = 131  # Ensure input shape matches model
-
-    def initUI(self):
-        self.setWindowTitle("Pose Detector")
+        self.setWindowTitle("Pose Detection")
         self.setGeometry(100, 100, 800, 600)
-
+        self.model = load_model('./model.h5')
+        
+        # UI Components
         self.video_label = QLabel(self)
-        self.video_label.setFixedSize(640, 480)
-
-        self.result_label = QLabel("Status: Not Started", self)
-
-        self.start_button = QPushButton("Start", self)
-        self.start_button.clicked.connect(self.start_detection)
-
-        self.stop_button = QPushButton("Stop", self)
-        self.stop_button.clicked.connect(self.stop_detection)
-
+        self.result_label = QLabel(self)  # Label for the result text
+        
+        # Set large font for result label
+        self.result_label.setFont(QFont("Arial", 40, QFont.Bold))
+        
+        # Layout
         layout = QVBoxLayout()
         layout.addWidget(self.video_label)
-        layout.addWidget(self.result_label)
-        layout.addWidget(self.start_button)
-        layout.addWidget(self.stop_button)
+        layout.addWidget(self.result_label)  # Add result label under the video
         self.setLayout(layout)
-
-    def start_detection(self):
+        
+        # Video capture setup
         self.cap = cv2.VideoCapture(0)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frame)
         self.timer.start(30)
 
-    def stop_detection(self):
-        self.timer.stop()
-        if self.cap:
-            self.cap.release()
-        self.video_label.clear()
+        # Pose detection setup
+        self.mp_pose = mp.solutions.pose
+        self.pose = self.mp_pose.Pose()
+        self.mp_draw = mp.solutions.drawing_utils
 
-    def detect_pose(self):
+        self.lm_list = []
+        self.capture_active = False
+
+    def update_frame(self):
         ret, frame = self.cap.read()
-        if not ret:
-            return
-        
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pose.process(frame_rgb)
+        if ret:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.pose.process(frame_rgb)
 
-        if results.pose_landmarks:
-            mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-            landmarks = []
-            for lm in results.pose_landmarks.landmark:
-                landmarks.append(lm.x)
-                landmarks.append(lm.y)
-                landmarks.append(lm.z)
-                landmarks.append(lm.visibility)
-            
-            # Ensure we have exactly 131 features
-            while len(landmarks) < self.num_features:
-                landmarks.append(0.0)  # Pad with zeros if needed
-            landmarks = np.array(landmarks[:self.num_features])  # Trim if too long
-            
-            self.sequence.append(landmarks)
-            if len(self.sequence) > self.no_of_timesteps:
-                self.sequence.pop(0)
-            
-            if len(self.sequence) == self.no_of_timesteps:
-                prediction = model.predict(np.expand_dims(self.sequence, axis=0))
-                label = np.argmax(prediction)
-                labels = ["Falling", "Sitting", "Standing"]
-                self.result_label.setText(f"Detected: {labels[label]}")
-        
-        # Draw Grid
-        h, w, _ = frame.shape
-        step_size = 50
-        for x in range(0, w, step_size):
-            cv2.line(frame, (x, 0), (x, h), (200, 200, 200), 1)
-        for y in range(0, h, step_size):
-            cv2.line(frame, (0, y), (w, y), (200, 200, 200), 1)
+            if results.pose_landmarks:
+                self.mp_draw.draw_landmarks(frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
+                self.lm_list.append(self.extract_landmarks(results))
+                
+                if len(self.lm_list) == 10:  # Fixed the condition check here
+                    self.start_detect()
+                    
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            image = QImage(gray_frame, gray_frame.shape[1], gray_frame.shape[0], QImage.Format_Grayscale8)
+            self.video_label.setPixmap(QPixmap.fromImage(image))
 
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-        image = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_Grayscale8)
-        self.video_label.setPixmap(QPixmap.fromImage(image))
+    def extract_landmarks(self, results):
+        landmarks = []
+        for lm in results.pose_landmarks.landmark:
+            landmarks.extend([lm.x, lm.y, lm.z, lm.visibility])
+        return landmarks
+
+    def start_detect(self):
+        df_data = np.array(self.lm_list[:10])  # Only keep the last 10 frames
+        df_data = np.expand_dims(df_data, axis=0)
+        self.lm_list = []  # Clear the list after processing
+        prediction = self.model.predict(df_data)
+        label = np.argmax(prediction)
+        labels = ["Falling", "Sitting", "Standing"]
+        
+        # Update the result label with a large font
+        self.result_label.setText(labels[label])
+        self.result_label.setAlignment(Qt.AlignCenter)  # Center-align the text
+        print(labels[label])
+
+    def closeEvent(self, event):
+        self.cap.release()  # Properly release video capture
+        event.accept()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = PoseDetectorApp()
+    window = PoseCaptureApp()
     window.show()
     sys.exit(app.exec_())
