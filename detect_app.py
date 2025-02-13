@@ -26,6 +26,7 @@ class PoseDetectorApp(QWidget):
         self.timer.timeout.connect(self.detect_pose)
         self.sequence = []
         self.no_of_timesteps = 10
+        self.num_features = 131  # Ensure input shape matches model
 
     def initUI(self):
         self.setWindowTitle("Pose Detector")
@@ -75,6 +76,11 @@ class PoseDetectorApp(QWidget):
                 landmarks.append(lm.y)
                 landmarks.append(lm.z)
                 landmarks.append(lm.visibility)
+            
+            # Ensure we have exactly 131 features
+            while len(landmarks) < self.num_features:
+                landmarks.append(0.0)  # Pad with zeros if needed
+            landmarks = np.array(landmarks[:self.num_features])  # Trim if too long
             
             self.sequence.append(landmarks)
             if len(self.sequence) > self.no_of_timesteps:
