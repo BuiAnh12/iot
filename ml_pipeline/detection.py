@@ -92,6 +92,14 @@ class PoseDetectorApp(QWidget):
                 labels = ["Falling", "Sitting", "Standing"]
                 self.result_label.setText(f"Detected: {labels[label]}")
         
+        # Draw Grid
+        h, w, _ = frame.shape
+        step_size = 50
+        for x in range(0, w, step_size):
+            cv2.line(frame, (x, 0), (x, h), (200, 200, 200), 1)
+        for y in range(0, h, step_size):
+            cv2.line(frame, (0, y), (w, y), (200, 200, 200), 1)
+
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
         image = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_Grayscale8)
         self.video_label.setPixmap(QPixmap.fromImage(image))
