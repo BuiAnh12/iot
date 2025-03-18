@@ -58,7 +58,13 @@ class PoseCaptureApp(QWidget):
 
         self.load_file_list()
 
-    def update_frame(self):
+    def capture_frame(self):
+        if self.frame_count >= 150:
+            self.timer.stop()  # Stop capture after 150 frames
+            self.save_data()
+            self.capture_active = False
+            return
+        
         ret, frame = self.cap.read()
         if ret:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -66,17 +72,16 @@ class PoseCaptureApp(QWidget):
 
             if results.pose_landmarks:
                 self.mp_draw.draw_landmarks(frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
-                if self.capture_active and time.time() - self.start_time < 10:
-                    self.lm_list.append(self.extract_landmarks(results))
-                    if self.video_writer:
-                        self.video_writer.write(frame)
-                elif self.capture_active:
-                    self.save_data()
-                    self.capture_active = False
+                self.lm_list.append(self.extract_landmarks(results))  # Save pose data
+                
+                if self.video_writer:
+                    self.video_writer.write(frame)  # Save video frame
 
             gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             image = QImage(gray_frame, gray_frame.shape[1], gray_frame.shape[0], QImage.Format_Grayscale8)
             self.video_label.setPixmap(QPixmap.fromImage(image))
+
+        self.frame_count += 1  # Increment frame counter
 
     def extract_landmarks(self, results):
         landmarks = []
@@ -90,13 +95,17 @@ class PoseCaptureApp(QWidget):
     def start_capture_sequence(self):
         self.lm_list = []
         self.capture_active = False
+        self.frame_count = 0  # Reset frame counter
         self.play_sound()
         time.sleep(5)  # Wait 5 seconds before starting capture
         self.play_sound()
         self.capture_active = True
-        self.start_time = time.time()
         self.start_video_recording()
         self.play_sound()
+        # Start frame capture at exactly 30 FPS
+        self.timer.setInterval(33)  # 33 milliseconds ≈ 30 FPS
+        self.timer.timeout.connect(self.capture_frame)
+        self.timer.start()
 
     def play_sound(self):
         winsound.Beep(1000, 500)  # Beep sound to indicate start/stop
@@ -112,14 +121,19 @@ class PoseCaptureApp(QWidget):
         tag = self.tag_selector.currentText()
         count = sum(1 for file in os.listdir("data") if file.startswith(f"data_{tag}_"))
         filename = f"data/data_{tag}_{count + 1}.csv"
-        df = pd.DataFrame(self.lm_list)
+
+        # Ensure exactly 150 frames are saved
+        df = pd.DataFrame(self.lm_list[:150])  # Trim if extra frames exist
         df.to_csv(filename, index=False)
+
         if self.video_writer:
             self.video_writer.release()
             self.video_writer = None
+
         self.load_file_list()
         self.play_sound()
         QMessageBox.information(self, "Capture Complete", f"Data and video saved as {filename}")
+
 
     def load_file_list(self):
         self.file_list.clear()
