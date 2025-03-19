@@ -8,6 +8,8 @@ from keras.models import load_model
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QMessageBox
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QImage, QPixmap
+import time
+
 
 # Load trained model
 model = load_model("./ml_pipeline/model.h5")
@@ -28,7 +30,7 @@ class PoseStreamApp(QWidget):
         self.timer = QTimer(self)
         self.sequence = []
         self.no_of_timesteps = 10
-        self.num_features = 131  # Ensure input shape matches model
+        self.num_features = 132  # Ensure input shape matches model
 
     def init_db(self):
         self.conn = sqlite3.connect("streams.db")
@@ -100,10 +102,20 @@ class PoseStreamApp(QWidget):
         selected_item = self.stream_list.currentItem()
         if selected_item:
             url = selected_item.text()
+            print(f"Đang xem stream từ URL: {url}")  # Debug log
             threading.Thread(target=self.display_stream, args=(url,), daemon=True).start()
+        else:
+            print("Lỗi: Không có stream nào được chọn!")
     
     def display_stream(self, url):
         cap = cv2.VideoCapture(url)
+
+        # Kiểm tra xem có mở được stream hay không
+        if not cap.isOpened():
+            print(f"Lỗi: Không mở được stream từ {url}")
+            self.result_label.setText("Lỗi: Không mở được stream")
+            return
+
         while cap.isOpened():
             ret, frame = cap.read()
             if ret:
@@ -111,6 +123,7 @@ class PoseStreamApp(QWidget):
                 results = pose.process(frame_rgb)
                 
                 if results.pose_landmarks:
+                    print("Pose detected successfully")
                     mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
                     landmarks = []
                     for lm in results.pose_landmarks.landmark:
@@ -131,8 +144,13 @@ class PoseStreamApp(QWidget):
                         prediction = model.predict(np.expand_dims(self.sequence, axis=0))
                         label = np.argmax(prediction)
                         labels = ["Falling", "Sitting", "Standing"]
+                        detected_label = labels[label]
+                        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                        print(f"[{timestamp}] Phát hiện: {detected_label}")
                         self.result_label.setText(f"Detected: {labels[label]}")
-                
+                else:
+                    print("No pose detected")
+
                 # Draw Grid
                 h, w, _ = frame.shape
                 step_size = 50
@@ -141,12 +159,20 @@ class PoseStreamApp(QWidget):
                 for y in range(0, h, step_size):
                     cv2.line(frame, (0, y), (w, y), (200, 200, 200), 1)
                 
+                # Chuyển đổi frame sang dạng grayscale và hiển thị
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
                 qimg = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format_Grayscale8)
                 self.video_label.setPixmap(QPixmap.fromImage(qimg))
+                
+                # Kiểm tra xem frame có hiển thị thành công không
+                if self.video_label.pixmap() is None:
+                    print("Lỗi: Không hiển thị được hình ảnh trên QLabel")
+                    
             else:
+                print("Lỗi: Không đọc được frame từ stream")
                 break
         cap.release()
+        print("Stream đã kết thúc.")
     
     def closeEvent(self, event):
         self.conn.close()

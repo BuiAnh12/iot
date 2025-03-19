@@ -6,6 +6,8 @@ import threading
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QListWidget, QMessageBox
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QImage, QPixmap
+import os
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|timeout;5000000"
 
 class StreamApp(QWidget):
     def __init__(self):
@@ -88,7 +90,10 @@ class StreamApp(QWidget):
             threading.Thread(target=self.display_stream, args=(url,), daemon=True).start()
     
     def display_stream(self, url):
-        cap = cv2.VideoCapture(url)
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        if not cap.isOpened():
+            print("Không thể mở stream:", url)
+
         while cap.isOpened():
             ret, frame = cap.read()
             if ret:
