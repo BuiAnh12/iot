@@ -19,6 +19,8 @@ __pycache__/
 # C extensions
 *.so
 ml_pipeline/data
+ml_pipeline/data_depricate
+ml_pipeline/increase_data
 # Distribution / packaging
 .Python
 build/

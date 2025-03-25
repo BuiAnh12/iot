@@ -29,7 +29,7 @@ class PoseStreamApp(QWidget):
         self.load_saved_urls()
         self.timer = QTimer(self)
         self.sequence = []
-        self.no_of_timesteps = 10
+        self.no_of_timesteps = 100
         self.num_features = 132  # Ensure input shape matches model
 
     def init_db(self):
