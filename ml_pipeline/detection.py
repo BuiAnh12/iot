@@ -67,7 +67,7 @@ class PoseCaptureApp(QWidget):
         return landmarks
 
     def start_detect(self):
-        df_data = np.array(self.lm_list[:10])  # Only keep the last 10 frames
+        df_data = np.array(self.lm_list[:100])  # Only keep the last 10 frames
         df_data = np.expand_dims(df_data, axis=0)
         self.lm_list = []  # Clear the list after processing
         prediction = self.model.predict(df_data)

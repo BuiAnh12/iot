@@ -41,7 +41,7 @@ class PoseCaptureApp(QWidget):
         self.merge_button.clicked.connect(self.merge_files)
 
         # Video capture setup
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Sử dụng DirectShows
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(30)
@@ -76,7 +76,9 @@ class PoseCaptureApp(QWidget):
                     if self.video_writer:
                         self.video_writer.write(frame)
                 elif self.capture_active:
+                    self.play_sound()
                     self.save_data()
+                    self.frame_count = 0
                     self.capture_active = False
 
             gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -101,7 +103,6 @@ class PoseCaptureApp(QWidget):
         self.capture_active = True
         self.start_time = time.time()
         # self.start_video_recording()
-        self.play_sound()
 
     def play_sound(self):
         winsound.Beep(1000, 500)  # Beep sound to indicate start/stop
