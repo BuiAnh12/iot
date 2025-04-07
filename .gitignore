@@ -21,6 +21,8 @@ __pycache__/
 ml_pipeline/data
 ml_pipeline/data_depricate
 ml_pipeline/increase_data
+ml_pipeline/model_checkpoints
+ml_pipeline/model_depricate
 # Distribution / packaging
 .Python
 build/
